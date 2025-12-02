@@ -972,6 +972,5 @@ COMMIT;
 * Savepoints allow partial rollback
 * Simple systems like movie booking or bank transfers rely heavily on transaction correctness
 
-
-
+---
 End of Module 1
