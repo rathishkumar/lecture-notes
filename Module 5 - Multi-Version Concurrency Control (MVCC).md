@@ -17,7 +17,9 @@ In high-traffic systems (like Amazon or Facebook), reads happen constantly. If e
 **The Solution: MVCC**
 Multi-Version Concurrency Control is the industry standard (used by PostgreSQL, Oracle, MySQL InnoDB, SQL Server). The core philosophy is:
 
-> *"Readers never block Writers, and Writers never block Readers."*
+> *"Readers never block Writers,*
+>
+> *Writers never block Readers."*
 
 ## 2. The Concept: Snapshots
 
@@ -32,6 +34,14 @@ Imagine a Google Doc, but with a twist:
 3. **User A** continues to read. They **do not** see User B's typing. They still see the clean "Version 1" snapshot from 9:00 AM.
 
 User A is reading the **past** (consistent state), while User B is writing the **future**.
+
+The DBMS maintains **multple physical versions** of a single logical object in the database:
+
+* When txn writes to an object, the DBMS creates new version of the object
+* When txn reads an object, it reads the newest version, that existed when txn started
+* Use timestamp to determine visibility
+
+> Multi-versioning without garbage collection allows the DBMS to support ***time-travel*** queries.
 
 ## 3. How MVCC Works (The Mechanics)
 
@@ -58,7 +68,99 @@ To implement this, the database adds hidden columns to every row to track the "l
 
    * MVCC treats an UPDATE as a **DELETE + INSERT**.
    * 1. Mark the old row as deleted (`xmax` = Current ID).
-   * 2. Create a new row with the new data (`xmin` = Current ID).
+     2. Create a new row with the new data (`xmin` = Current ID).
+
+### Demo
+
+```sql
+
+CREATE TABLE txn_demo ( id INT PRIMARY KEY, val INT NOT NULL) ;
+INSERT INTO txn_demo VALUES (1, 100), (2, 200)
+
+```
+
+Viewing version details:
+
+```sql
+
+SELECT ctid, xmin, xmax, * FROM txn_demo;
+
+ ctid  | xmin | xmax | id | val
+-------+------+------+----+-----
+ (0,1) |  960 |    0 |  1 | 100
+ (0,2) |  960 |    0 |  2 | 200
+(2 rows)
+
+```
+
+Session A:
+
+```sql
+
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+SELECT ctid, xmin, xmax, * FROM txn_demo;
+
+ ctid  | xmin | xmax | id | val
+-------+------+------+----+-----
+ (0,1) |  960 |    0 |  1 | 100
+ (0,2) |  960 |    0 |  2 | 200
+(2 rows)
+
+-- update on session B and run the select again
+
+SELECT ctid, xmin, xmax, * FROM txn_demo;
+
+SELECT ctid, xmin, xmax, * FROM txn_demo;
+ ctid  | xmin | xmax | id | val
+-------+------+------+----+-----
+ (0,2) |  960 |    0 |  2 | 200
+ (0,3) |  961 |    0 |  1 | 101
+(2 rows)
+
+
+
+```
+
+Session B
+
+```sql
+
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+SELECT ctid, xmin, xmax, * FROM txn_demo;
+
+ ctid  | xmin | xmax | id | val
+-------+------+------+----+-----
+ (0,1) |  960 |    0 |  1 | 100
+ (0,2) |  960 |    0 |  2 | 200
+(2 rows)
+
+UPDATE txn_demo SET val = val + 1 WHERE id = 1 RETURNING txid_current();
+ txid_current
+--------------
+          961
+(1 row)
+
+
+SELECT ctid, xmin, xmax, * FROM txn_demo;
+ ctid  | xmin | xmax | id | val
+-------+------+------+----+-----
+ (0,2) |  960 |    0 |  2 | 200
+ (0,3) |  961 |    0 |  1 | 101
+(2 rows)
+
+
+```
+
+![1764589007748](image/Module5-Multi-VersionConcurrencyControl(MVCC)/1764589007748.png)
+
+### Transaction Status Table
+
+* This table keeps track of transaction status
+* Eg: txn id 961 Aborted & txn id 962 Committed, etc.
+
+![1764591348368](image/Module5-Multi-VersionConcurrencyControl(MVCC)/1764591348368.png)
 
 ## 4. Visibility Rules: Who sees what?
 
@@ -84,66 +186,27 @@ Time  |  Transaction 100 (Reader)   |  Transaction 101 (Writer)
       |  (Because T101 is "future") |
 ```
 
+## 5. Version Storage
 
+**Approach 1: Append-Only Storage**
 
-## 5. Implementation Example
+* New versions are appended to same table space
+* PostgreSQL use this approach
 
-Let's look at how PostgreSQL handles this using the hidden system columns.
+**Approach 2: Time-Travel Storage**
 
-### Setup
+* Old versions are copied to separate table storage
 
-```sql
+**Approach 3: Delta Storage**
 
--- Create a simple table
-CREATE TABLE accounts (
-    id INT PRIMARY KEY,
-    balance INT
-);
+* The original values of the modified attributes are copied into a separate delta record space.
+* Most common version
 
--- Insert initial data (Assume Transaction ID = 10)
-INSERT INTO accounts VALUES (1, 100);
+## 6. Version Chain Ordering
 
-```
+![1764590904640](image/Module5-Multi-VersionConcurrencyControl(MVCC)/1764590904640.png)
 
-
-### The Workflow
-
-**Step 1: Update the Data (Transaction 20)**
-We update the balance from 100 to 200.
-
-```sql
-
-BEGIN; -- TxID 20
-UPDATE accounts SET balance = 200 WHERE id = 1;
-COMMIT;
-
-```
-
-
-**Internal State of DB:**
-The database now contains **two** physical rows for ID 1.
-
-| Row Address | ID | Balance | xmin (Born)  | xmax (Died)  | Status     |
-| :---------- | :- | :------ | :----------- | :----------- | :--------- |
-| 0x01        | 1  | 100     | 10           | **20** | Dead (Old) |
-| 0x02        | 1  | 200     | **20** | NULL         | Live (New) |
-
-**Step 2: A New Reader Arrives (Transaction 30)**
-Transaction 30 starts.
-
-* It ignores Row 0x01 because `xmax` (20) is less than 30 (it knows it died).
-* It reads Row 0x02 because `xmin` (20) is less than 30 (it knows it was born).
-* **Result:** Reads 200.
-
-**Step 3: An Old Reader (Time Travel)**
-Imagine a long-running report (Transaction 15) is still running.
-
-* It looks at Row 0x02: `xmin` is 20. 20 > 15. "This is from the future." **Ignore.**
-* It looks at Row 0x01: `xmax` is 20. 20 > 15. "This deletion happened in the future." **Valid.**
-* **Result:** Reads 100.
-
-
-## 6. The Cost of MVCC: Garbage Collection
+## 7. The Cost of MVCC: Garbage Collection
 
 Since updates create new copies, the database grows indefinitely if we don't clean up.
 
@@ -154,16 +217,6 @@ If we update a row 1,000 times, we have 1,000 versions. 999 of them are useless 
 ### The Solution: VACUUM
 
 The database runs a background process (called `VACUUM` in PostgreSQL or `Purge` in Oracle) to physically remove dead versions that are no longer visible to *any* active transaction.
-
-## 7. Comparison: 2PL vs. MVCC
-
-| Feature               | Two-Phase Locking (2PL)     | MVCC                                         |
-| :-------------------- | :-------------------------- | :------------------------------------------- |
-| **Concurrency** | Low (Readers block Writers) | **High** (Readers/Writers coexist)     |
-| **Storage**     | Low (Update in place)       | **High** (Keeps multiple versions)     |
-| **Maintenance** | Low                         | **High** (Needs Vacuum/Purge)          |
-| **Read Speed**  | Fast (Reads latest)         | Slower (Must traverse version chain)         |
-| **Rollback**    | Complex (Needs Undo Log)    | **Instant** (Just ignore new versions) |
 
 ## 8. Glossary
 
