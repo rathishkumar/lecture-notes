@@ -268,7 +268,7 @@ Transaction          Log File         Data File (Disk)
 
    |                    |                      |
 
-   |-- 1. Update X -----+                      |
+   |-- 1. Update X --+                      |
 
    |                    |-> Record: "X=New"    |
 
@@ -276,7 +276,7 @@ Transaction          Log File         Data File (Disk)
 
    |                    |                      |
 
-   |-- 2. Commit -------+                      |
+   |-- 2. Commit -+                      |
 
    |                    |-> Record: "Commit"   |
 
@@ -284,7 +284,7 @@ Transaction          Log File         Data File (Disk)
 
    |                    |                      |
 
-   |                    |                      |---> 3. Async Write (Checkpoint)
+   |                    |                      |> 3. Async Write (Checkpoint)
 
    |                    |                      |    (X=New written to data file)
 
@@ -484,7 +484,7 @@ A schedule is a sequence of all operations (reads and writes) performed by a set
 #### Example of Interleaving Execution:
 
 | Interleaving Good Example                                               | Interleaving Bad Examp                                                  |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| -- | -- |
 | ![1764064801106](image/Module1-TransactionFundamentals/1764064801106.png) | ![1764065053534](image/Module1-TransactionFundamentals/1764065053534.png) |
 
 > *How do we judge whether a schedule is correct?*
@@ -591,7 +591,7 @@ ROLLBACK;
 
 **Why this matters**: long “idle in transaction” sessions hold locks and prevent vacuum, causing performance issues.
 
----
+
 
 # 8. Basic Booking Transaction
 
@@ -618,7 +618,7 @@ COMMIT;
 
 **FOR UPDATE** ensures two people cannot book the same seat.
 
----
+
 
 ## 9. Row Locks (Why We Need FOR UPDATE)
 
@@ -904,7 +904,7 @@ COMMIT;
 
 **Nested transactions**: PostgreSQL does not support true nested transactions; savepoints are the way to get similar behavior.
 
----
+
 
 ## 15. Putting It All Together
 
@@ -972,6 +972,6 @@ COMMIT;
 * Savepoints allow partial rollback
 * Simple systems like movie booking or bank transfers rely heavily on transaction correctness
 
----
+
 
 End of Module 1
