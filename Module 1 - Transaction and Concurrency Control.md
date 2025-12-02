@@ -4,8 +4,6 @@
 
 **Goal:** Build a complete, intuitive mental model of transactions, ACID, isolation, MVCC, locks, anomalies, deadlocks and safe application patterns.
 
----
-
 ## 1. Introduction
 
 This module teaches the fundamentals of transactions and concurrency control using a simple and relatable example: a **movie seat booking system**.
@@ -20,8 +18,6 @@ The goal is to help beginners understand:
 * How isolation and locking work
 * How to avoid errors such as double booking
 * How PostgreSQL handles concurrency internally
-
----
 
 ## 2. The System: Movie Seat Booking
 
@@ -91,8 +87,6 @@ SELECT * FROM show_stats;
 
 ```
 
----
-
 ## 3. What Can Go Wrong Without Transactions? (Concrete Failures)
 
 * **Double booking**:
@@ -113,8 +107,6 @@ SELECT * FROM show_stats;
   * Long open transactions prevent cleanup, slowing the DB.
 
 Seeing these problems motivates the need for transactions, isolation, and proper patterns.
-
----
 
 ## 4. What Is a Transaction?
 
@@ -147,8 +139,6 @@ In PostgreSQL:
 
 * If you don’t start a transaction, each statement runs as a transaction
 * If you start a transaction, everything between BEGIN and COMMIT is one unit
-
----
 
 ## 5. How PostgreSQL Executes Transactions
 
@@ -201,8 +191,6 @@ COMMIT;
 
 ```
 
----
-
 ## 6. ACID Properties
 
 * **Atomicity**: the booking and the payment both succeed, or both are undone.
@@ -218,8 +206,6 @@ COMMIT;
   * *PostgreSQL uses WAL (Write-Ahead Log) to ensure this.*
 
 We will unpack isolation and durability more below.
-
----
 
 ### 6.1 Atomicity Example
 
@@ -263,8 +249,6 @@ SELECT reserved FROM seats WHERE show_id = 1 AND seat_no = 'A3';  -- FALSE
 SELECT free_count FROM show_stats WHERE show_id = 1;  -- 2
 
 ```
-
----
 
 ### Mechanisms for Ensuring Atomicity
 
@@ -324,8 +308,6 @@ Most database systems follows this approach:: MySQl< PostgreSQL, MSSQL, etc.
 * Make modified pages visible to other transactions only when the transactions successfully commits
 * Instance recovery after crash
 
----
-
 ### 6.2 Consistency Example
 
 Consistency ensures that the database remains in a valid state after the transaction, adhering to constraints and invariants.
@@ -380,8 +362,6 @@ DETAIL:  Failing row contains (1, -1, 0).
 
 ```
 
----
-
 ### 6.3 Isolation Example
 
 Isolation ensures that concurrent transactions do not interfere. Two users booking the same seat should not both succeed.
@@ -421,8 +401,6 @@ COMMIT;
 
 Only one booking succeeds.
 
----
-
 ### Understanding Anamolies
 
 While it's easier for application developers to assume transactions run one at a time (serially), databases allow interleaving to take advantage of parallel hardware (CPUs) and improve performance (hide latency - slower disk IO).
@@ -461,8 +439,6 @@ In this interleaved example, T2 read an intermediate (uncommitted) value of A ($
 
 > *We need to find a way to interleave transaction but still make it appear as if they ran one-at-a-time.*
 
----
-
 ### Mechanisms for Ensuring Isolation
 
 A **concurrency control** protocol is how DBMS decides the proper interleaving of operations from multiple transactions.
@@ -471,8 +447,6 @@ Two categories of protocols:
 
 * **Pessimistic:** Do not let problems arise in the first place
 * **Optimistic:** Assume conflicts are rare; deal with them after they happen
-
----
 
 ### Schedule
 
@@ -534,8 +508,6 @@ Interleaving operations can improve performance but, if not managed carefully by
 * Equivalent to some serial execution of the transaction
 * If a schedule is serializable, its execution will always leave the database in a consistent state, just as if transactions had run sequentially.
 
----
-
 ### 6.4 Durability Example
 
 Durability ensures committed changes survive crashes. PostgreSQL uses WAL to write changes to disk before commit.
@@ -564,8 +536,6 @@ sudo -u postgres pg_ctl -D /Library/PostgreSQL/18/data restart
 
 ```
 
---
-
 **Reset**
 
 ```sql
@@ -577,8 +547,6 @@ UPDATE seats SET reserved = FALSE WHERE show_id = 1;
 UPDATE show_stats SET free_count = (SELECT COUNT(*) FROM seats WHERE show_id = 1 AND reserved = FALSE) WHERE show_id = 1;
 
 ```
-
----
 
 ## 7. Transaction State Machine
 
@@ -702,8 +670,6 @@ COMMIT;
 
 ```
 
----
-
 ## 10. Deadlock
 
 Deadlock happens when two transactions wait on each other.
@@ -765,8 +731,6 @@ CONTEXT:  while locking tuple (0,16) in relation "seats"
 * **Lock ordering**: always acquire locks in a consistent order (e.g., lowest seat number first).
 * **Keep transactions short**: the less time locks are held, the lower the chance of deadlocks.
 * Use lower isolation levels where acceptable.
-
----
 
 ## 11. MVCC (Multi-Version Concurrency Control)
 
@@ -835,8 +799,6 @@ UPDATE show_stats SET free_count = (SELECT COUNT(*) FROM seats WHERE show_id = 1
 
 ```
 
----
-
 ## 12. Concurrency Anamolies
 
 These anamolies demonstrates the need for various isolation levels.
@@ -888,8 +850,6 @@ A subtle anomaly where two transactions read overlapping data and then write non
 
 Repeatable Read prior to PostgreSQL 9.1 had different behavior; current Repeatable Read still allows write skew; Serializable prevents it by refusing some transactions (serialization failure).
 
----
-
 ## 13. Isolation Levels
 
 ### Read Committed (default)
@@ -916,8 +876,6 @@ Repeatable Read prior to PostgreSQL 9.1 had different behavior; current Repeatab
 * Avoids anomalies including write skew.
 
 **Note**: Serializable corrects the last class of anomalies by aborting one of the conflicting transactions. This requires careful application handling (retry on serialization failure).
-
----
 
 ## 14. Savepoints and Partial Rollback
 
@@ -987,11 +945,7 @@ COMMIT;
 
 ```
 
----
-
 ## 16. How to ensure Atomicity Beyond Databases?
-
----
 
 ## 17. Glossary
 
@@ -1005,8 +959,6 @@ COMMIT;
 * **Serialization failure**: DB aborts a transaction under Serializable to preserve correctness.
 * **Deadlock**: cyclic wait for locks; DB aborts one transaction.
 * **Savepoint**: named point within a transaction you can roll back to.
-
----
 
 ## 18. Key takeaways
 
