@@ -231,5 +231,5 @@ The database runs a background process (called `VACUUM` in PostgreSQL or `Purge`
 2. **Space vs. Time:** MVCC trades storage space (keeping old versions) for concurrency (speed).
 3. **Updates are Inserts:** In MVCC, an `UPDATE `is actually a `DELETE `of the old version and an `INSERT` of the new one.
 4. **Cleanup is Critical:** Without a proper Garbage Collection process (Vacuum), an MVCC database will run out of disk space and slow down.
-
+---
 End of Module 5
