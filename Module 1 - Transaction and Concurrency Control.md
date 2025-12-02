@@ -401,7 +401,7 @@ COMMIT;
 
 Only one booking succeeds.
 
-### Understanding Anamolies
+## Understanding Anamolies
 
 While it's easier for application developers to assume transactions run one at a time (serially), databases allow interleaving to take advantage of parallel hardware (CPUs) and improve performance (hide latency - slower disk IO).
 
@@ -439,7 +439,7 @@ In this interleaved example, T2 read an intermediate (uncommitted) value of A ($
 
 > *We need to find a way to interleave transaction but still make it appear as if they ran one-at-a-time.*
 
-### Mechanisms for Ensuring Isolation
+## Mechanisms for Ensuring Isolation
 
 A **concurrency control** protocol is how DBMS decides the proper interleaving of operations from multiple transactions.
 
