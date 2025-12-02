@@ -212,7 +212,7 @@ Since updates create new copies, the database grows indefinitely if we don't cle
 
 ### The Problem: Bloat
 
-If we update a row 1,000 times, we have 1,000 versions. 999 of them are useless once all old transactions have finished. This is called  **Bloat** .
+If we update a row 1,000 times, we have 1,000 versions. 999 of them are useless once all old transactions have finished. This is called  **Bloat**.
 
 ### The Solution: VACUUM
 
