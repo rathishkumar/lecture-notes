@@ -26,7 +26,7 @@ A Movie Seat Booking System — to explain concurrency, conflicts, and isolation
 
 | **#** | **Module**                                                                                                    | **Description**                                                                        |
 | ----------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 01          | [Transaction Fundamentals](Lecture%20Notes/Module%201%20-%20Transaction%20and%20Concurrency%20Control.md)              | What is a transaction? Understanding ACID, transaction lifecycle, and the basics of locking. |
+| 01          | [Transaction Fundamentals ](Lecture%20Notes/Module%201%20-%20Transaction%20and%20Concurrency%20Control.md)              | What is a transaction? Understanding ACID, transaction lifecycle, and the basics of locking. |
 | 02          | [Isolation Levels](Lecture%20Notes/Module%202%20-%20Isolation%20Levels.md)                                             | Dirty reads, non-repeatable reads, phantoms, write skew, and how databases prevent them.     |
 | 03          | [Two-Phase Locking (2PL)](Lecture%20Notes/Module%203%20-%20Two%20Phase%20Locking.md)                                   | Shared vs. exclusive locks, growing & shrinking phases, strict 2PL, and deadlocks.           |
 | 04          | [Timestamp Ordering &amp;OCC](Lecture%20Notes/Module%204%20-%20Timestamp%20Ordering%20&%20Optimistic%20Concurrency.md) | How databases handle concurrencywithoutlocks using timestamps and optimistic validation.     |
@@ -62,6 +62,23 @@ A Movie Seat Booking System — to explain concurrency, conflicts, and isolation
 * **WAL:** Log is written first, data page later
 * **LSN:** ID used to order all log records
 * **Dirty Page:** Modified in memory but not yet saved to disk
+
+## 📖 Reference Materials
+
+These are the primary sources and recommended readings used while preparing the lecture notes:
+
+**Books**
+
+* [Database System Concepts](https://www.db-book.com/) – Silberschatz, Korth, Sudarshan
+* [Designing Data-Intensive Applications](https://www.oreilly.com/library/view/designing-data-intensive-applications/9781491903063/) – Martin Kleppmann
+
+**University Course**
+
+* [CMU – Introduction to Database Systems (15-445 / 645)](https://15445.courses.cs.cmu.edu/fall2025/) - Lectures by Andy Pavlo (available online) — excellent for understanding storage, WAL, concurrency, and recovery.
+
+## 📬 For Questions
+
+If you have questions about the concepts or need clarification, feel free to reach out on LinkedIn: [Rathish Kumar B](https://www.linkedin.com/in/rathishkb/)
 
 ## 🤝 Contributions
 
