@@ -65,7 +65,7 @@ CREATE TABLE show_stats(
 
 ```sql
 
-INSERT INTO shows(code) VALUES ('S1'); -- Kantha evening show
+INSERT INTO shows(code) VALUES ('S1'); 
 
 INSERT INTO seats(show_id, seat_no, house)
 SELECT 1,'A1',TRUE UNION ALL
