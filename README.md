@@ -26,7 +26,7 @@ A Movie Seat Booking System — to explain concurrency, conflicts, and isolation
 
 | **#** | **Module**                                                                                                    | **Description**                                                                        |
 | ----------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 01          | [Transaction Fundamentals ](lecture-notes/Module%201%20-%20Transaction%20and%20Concurrency%20Control.md)              | What is a transaction? Understanding ACID, transaction lifecycle, and the basics of locking. |
+| 01          | [Transaction Fundamentals ]([lecture-notes/Module%201%20-%20Transaction%20and%20Concurrency%20Control.md])              | What is a transaction? Understanding ACID, transaction lifecycle, and the basics of locking. |
 | 02          | [Isolation Levels](Lecture%20Notes/Module%202%20-%20Isolation%20Levels.md)                                             | Dirty reads, non-repeatable reads, phantoms, write skew, and how databases prevent them.     |
 | 03          | [Two-Phase Locking (2PL)](Lecture%20Notes/Module%203%20-%20Two%20Phase%20Locking.md)                                   | Shared vs. exclusive locks, growing & shrinking phases, strict 2PL, and deadlocks.           |
 | 04          | [Timestamp Ordering &amp;OCC](Lecture%20Notes/Module%204%20-%20Timestamp%20Ordering%20&%20Optimistic%20Concurrency.md) | How databases handle concurrencywithoutlocks using timestamps and optimistic validation.     |
