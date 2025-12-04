@@ -593,7 +593,7 @@ ROLLBACK;
 
 
 
-# 8. Basic Booking Transaction
+## 8. Basic Booking Transaction
 
 ```sql
 
@@ -617,7 +617,6 @@ COMMIT;
 ```
 
 **FOR UPDATE** ensures two people cannot book the same seat.
-
 
 
 ## 9. Row Locks (Why We Need FOR UPDATE)
