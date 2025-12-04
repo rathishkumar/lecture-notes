@@ -945,6 +945,8 @@ COMMIT;
 ```
 
 ## 16. How to ensure Atomicity Beyond Databases?
+<img width="1334" height="1200" alt="image" src="https://github.com/user-attachments/assets/49b1bd09-16cd-4697-be81-ac56983305ef" />
+
 
 ## 17. Glossary
 
