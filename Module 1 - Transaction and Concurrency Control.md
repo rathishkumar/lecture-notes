@@ -194,16 +194,12 @@ COMMIT;
 ## 6. ACID Properties
 
 * **Atomicity**: the booking and the payment both succeed, or both are undone.
-  * *If payment fails, the seat should not remain booked.*
+
 * **Consistency**: database rules (constraints, invariants) hold after the transaction.
-  * *A seat cannot be both booked and unbooked.*
-  * *reserved is boolean and show_stats free_count must match actual free seats.*
-  * *The number of available seats cannot become negative.*
+
 * **Isolation**: concurrent transactions do not interfere in unexpected ways.
-  * *Two users booking A1 at the same time should not both succeed.*
+
 * **Durability**: once a transaction commits, its effects persist even after crashes.
-  * *Once a booking is committed, it will stay even after crashes or restarts.*
-  * *PostgreSQL uses WAL (Write-Ahead Log) to ensure this.*
 
 We will unpack isolation and durability more below.
 
@@ -407,35 +403,45 @@ While it's easier for application developers to assume transactions run one at a
 
 Here's an example to build intuition:
 
-Imagine two transactions, T1 and T2, running simultaneously:
+Two users share Account A ($1000). User 1 withdraws $100 via the mobile app while, at the same time, User 2 deposits $50 via the web app. Without proper isolation, both read $1000, write their own result, and the deposit overwrites the withdrawal. Final balance becomes $1050 instead of the correct $950.
 
-* **T1:** Wants to transfer $100 from Account A to Account B.
-  * Operation 1: Read balance of Account A
-  * Operation 2: Deduct $100 from Account A
-  * Operation 3: Read balance of Account B
-  * Operation 4: Add $100 to Account B
-  * Operation 5: Commit T1
-* **T2:** Wants to calculate 5% interest on Account A and update its balance.
-  * Operation A: Read balance of Account A
-  * Operation B: Calculate 5% interest
-  * Operation C: Update balance of Account A
-  * Operation D: Commit T2
+```
+Initial Account A: $1000
 
-A **serial execution** would be either T1 completely finishes, then T2 starts, OR T2 completely finishes, then T1 starts.
+TIME |   T1 (Withdraw $100)            |   T2 (Deposit $50)             | Account A | Comment
+-----+----------------------------------+--------------------------------+-----------+-------------------------------
+ 1   | Read A = 1000                    |                                |   1000    | T1 reads initial value
+ 2   |                                  | Read A = 1000                  |   1000    | T2 reads initial value (stale)
+ 3   | Compute: 1000 - 100 = 900        |                                |   1000    | T1 computes locally
+ 4   | Write A = 900                    |                                |    900    | T1 updates DB
+ 5   | Commit                           |                                |    900    | T1 done
+ 6   |                                  | Compute: 1000 + 50 = 1050      |    900    | T2 computes from stale read
+ 7   |                                  | Write A = 1050                 |   1050    | T2 overwrites T1’s update
+ 8   |                                  | Commit                         |   1050    | T2 done
 
-An **interleaved execution** mixes their operations, like this:
+Final (Interleaved): 1050
+Correct (Serial):    950  -> ($1000 - $100 + $50)
+Outcome: Lost update (T1’s $100 withdrawal overwritten)
+```
+Serial Execution:
 
-1. **T1: Read A** (reads $1000 from Account A)
-2. **T1: Deduct $100 from A** (Account A now $900 in T1's view)
-3. **T2: Read A** (reads $900 from Account A) - *This is where the problem can occur!*
-4. **T2: Calculate 5% interest** (5% of $900 = $45)
-5. **T2: Update A** (Account A updated to $945)
-6. **T2: Commit**
-7. **T1: Read B**
-8. **T1: Add $100 to B**
-9. **T1: Commit**
+```
+Serial: T1 then T2
 
-In this interleaved example, T2 read an intermediate (uncommitted) value of A ($900) that T1 had just modified. This could lead to an incorrect final state for Account A ($945 instead of $950 if T1 had finished first, or $1050 if T2 had finished first on the original $1000). These are generally refered as anamolies or conflicts.
+STEP |   T1 (Withdraw $100)            |   T2 (Deposit $50)             | Account A
+-----+----------------------------------+--------------------------------+-----------
+ 1   | Read A = 1000                    |                                |   1000
+ 2   | Compute: 1000 - 100 = 900        |                                |   1000
+ 3   | Write A = 900                    |                                |    900
+ 4   | Commit                           |                                |    900
+ 5   |                                  | Read A = 900                   |    900
+ 6   |                                  | Compute: 900 + 50 = 950        |    900
+ 7   |                                  | Write A = 950                  |    950
+ 8   |                                  | Commit                         |    950
+
+Final (Serial): 950
+```
+
 
 > *We need to find a way to interleave transaction but still make it appear as if they ran one-at-a-time.*
 
