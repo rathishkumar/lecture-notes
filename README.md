@@ -26,18 +26,18 @@ A Movie Seat Booking System — to explain concurrency, conflicts, and isolation
 
 | **#** | **Module**                                                                                                    | **Description**                                                                        |
 | ----------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 01          | [Transaction Fundamentals ](lecture-notes/Module%201%20-%20Transaction%20and%20Concurrency%20Control.md)              | What is a transaction? Understanding ACID, transaction lifecycle, and the basics of locking. |
-| 02          | [Isolation Levels](Lecture%20Notes/Module%202%20-%20Isolation%20Levels.md)                                             | Dirty reads, non-repeatable reads, phantoms, write skew, and how databases prevent them.     |
-| 03          | [Two-Phase Locking (2PL)](Lecture%20Notes/Module%203%20-%20Two%20Phase%20Locking.md)                                   | Shared vs. exclusive locks, growing & shrinking phases, strict 2PL, and deadlocks.           |
-| 04          | [Timestamp Ordering &amp;OCC](Lecture%20Notes/Module%204%20-%20Timestamp%20Ordering%20&%20Optimistic%20Concurrency.md) | How databases handle concurrencywithoutlocks using timestamps and optimistic validation.     |
-| 05          | [MVCC](Lecture%20Notes/Module%205%20-%20Multi-Version%20Concurrency%20Control%20(MVCC).md)                             | How snapshot isolation works. Version chains, visibility rules, and why vacuuming is needed. |
+| 01          | [Transaction Fundamentals ](https://github.com/rathishkumar/lecture-notes/blob/main/Module%201%20-%20Transaction%20and%20Concurrency%20Control.md)              | What is a transaction? Understanding ACID, transaction lifecycle, and the basics of locking. |
+| 02          | [Isolation Levels](https://github.com/rathishkumar/lecture-notes/blob/main/Module%202%20-%20Isolation%20Levels.md)                                             | Dirty reads, non-repeatable reads, phantoms, write skew, and how databases prevent them.     |
+| 03          | [Two-Phase Locking (2PL)](https://github.com/rathishkumar/lecture-notes/blob/main/Module%203%20-%20Two%20Phase%20Locking.md)                                   | Shared vs. exclusive locks, growing & shrinking phases, strict 2PL, and deadlocks.           |
+| 04          | [Timestamp Ordering &amp;OCC](https://github.com/rathishkumar/lecture-notes/blob/main/Module%204%20-%20Timestamp%20Ordering%20%26%20Optimistic%20Concurrency.md) | How databases handle concurrencywithoutlocks using timestamps and optimistic validation.     |
+| 05          | [MVCC](https://github.com/rathishkumar/lecture-notes/blob/main/Module%205%20-%20Multi-Version%20Concurrency%20Control%20(MVCC).md)                             | How snapshot isolation works. Version chains, visibility rules, and why vacuuming is needed. |
 
 ### Part 2: Crash Recovery
 
 | **#** | **Module**                                                                            | **Description**                                                          |
 | ----------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| 06          | [Crash Recovery Techniques](Lecture%20Notes/Module%206%20-%20Crash%20Recovery%20Techniques.md) | Why recovery is hard. Introducing Write-Ahead Logging (WAL) and Shadow Paging. |
-| 07          | [ARIES Recovery](Lecture%20Notes/Module%207%20-%20ARIES%20Recovery.md)                         | The standard recovery algorithm:Analysis → Redo → Undo.                      |
+| 06          | [Crash Recovery Techniques](https://github.com/rathishkumar/lecture-notes/blob/main/Module%206%20-%20Crash%20Recovery%20Techniques.md) | Why recovery is hard. Introducing Write-Ahead Logging (WAL) and Shadow Paging. |
+| 07          | [ARIES Recovery](https://github.com/rathishkumar/lecture-notes/blob/main/Module%207%20-%20ARIES%20Recovery.md)                         | The standard recovery algorithm:Analysis → Redo → Undo.                      |
 
 ## 🛠️ What’s Inside This Repo
 
