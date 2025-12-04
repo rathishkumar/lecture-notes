@@ -53,15 +53,15 @@ Separate data structure to track which pages in the buffer pool changes that DBM
 
 The ARIES recovery technique utilizes a structured log to record all actions performed by transactions. The log entries typically include:
 
--**Transaction ID:** Unique identifier for each transaction.
+* **Transaction ID:** Unique identifier for each transaction.
 
--**Operation Type:** Indicates whether the operation is a read, write, commit, or abort.
+* **Operation Type:** Indicates whether the operation is a read, write, commit, or abort.
 
--**Before Image:** The state of the data before the operation (used for undo).
+* **Before Image:** The state of the data before the operation (used for undo).
 
--**After Image:** The state of the data after the operation (used for redo).
+* **After Image:** The state of the data after the operation (used for redo).
 
--**Log Sequence Number (LSN):** A unique identifier for each log entry, used to maintain the order of operations.
+* **Log Sequence Number (LSN):** A unique identifier for each log entry, used to maintain the order of operations.
 
 ### Example Log Entry
 
