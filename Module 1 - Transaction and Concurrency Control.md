@@ -87,7 +87,7 @@ SELECT * FROM show_stats;
 
 ```
 
-## 3. What Can Go Wrong Without Transactions? (Concrete Failures)
+## 3. What Can Go Wrong Without Transactions?
 
 * **Double booking**:
 
