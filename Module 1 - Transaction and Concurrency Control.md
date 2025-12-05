@@ -258,38 +258,10 @@ There are two approaches: Logging and Shadow Paging.
 
 **Visual:**
 
-```plaintext
+<img width="794" height="411" alt="image" src="https://github.com/user-attachments/assets/e75c1c55-55d4-4268-814a-2528706dff5e" />
 
-Transaction          Log File         Data File (Disk)
+Source: [Data Engineer Things](https://blog.dataengineerthings.org/postgresql-wal-internals-for-data-engineers-ef6229584a99)
 
-   |                    |                      |
-
-   |-- 1. Update X --+                      |
-
-   |                    |-> Record: "X=New"    |
-
-   |                    |   (Saved to Disk)    |
-
-   |                    |                      |
-
-   |-- 2. Commit -+                      |
-
-   |                    |-> Record: "Commit"   |
-
-   |                    |   (Saved to Disk)    |
-
-   |                    |                      |
-
-   |                    |                      |> 3. Async Write (Checkpoint)
-
-   |                    |                      |    (X=New written to data file)
-
-   |                    |                      |
-
-
-   *CRASH* before step 3? -> Replay WAL to restore X=New
-
-```
 
 Example: **Write Ahead Logging (WAL)**
 
