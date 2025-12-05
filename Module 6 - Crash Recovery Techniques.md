@@ -145,20 +145,6 @@ The database organizes data into pages and uses a **Page Table** to track where 
    * To commit, the DBMS updates the **Root Pointer** to point to the new Shadow Page instead of the old one.
    * This switch is atomic (a single hardware operation).
 
-### Visual Representation
-
-```plaintext
-
-Before Commit:
-[ Root ] ----> [ Old Page Table ] ----> [ Page A (Data: 10) ]
-                                   \--> [ Shadow Page A (Data: 20) ] (Not active yet)
-
-After Commit:
-[ Root ] --/-> [ Old Page Table ]       [ Page A (Data: 10) ] (Now Garbage)
-           \-> [ New Page Table ] ----> [ Shadow Page A (Data: 20) ] (Now Active)
-
-```
-
 ### Shadow Paging Example
 
 Scenario: Update a row value from `10` to `20` in `Page 5.`
