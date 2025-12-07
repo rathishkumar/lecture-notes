@@ -23,14 +23,12 @@
 
 ### Scenario: Movie Seat Booking
 
-Movie Name: Kaantha
-
 Two users:
 
 * Session A
 * Session A
 
-Show S1 of "Kaantha" has seats:
+Show S1 has seats:
 
 * Some house (reserved) seats (kept aside for VIP / guest pass)
   * Policy: at least one house seat must remain free until release)
@@ -61,7 +59,7 @@ CREATE TABLE seats(
 );
 
 - Populate movie and seat details
-INSERT INTO shows(code) VALUES ('S1'); -- Kantha evening show
+INSERT INTO shows(code) VALUES ('S1');
 INSERT INTO seats(show_id, seat_no, house)
 SELECT 1,'A1',TRUE UNION ALL
 SELECT 1,'A2',TRUE UNION ALL
