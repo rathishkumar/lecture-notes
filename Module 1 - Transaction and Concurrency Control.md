@@ -89,24 +89,25 @@ SELECT * FROM show_stats;
 
 ## 3. What Can Go Wrong Without Transactions?
 
-* **Double booking**:
+**Double booking**
 
-  * Two users see seat A1 as available and both try to book it.
-* **Partial failure**:
+Two users open the booking page at the same time. Both see seat A1 as available. Both click "Book." Both get a confirmation. Now the same seat is sold twice.
 
-  * Seat marked as booked → payment fails → booking record still added.
-  * Seat becomes blocked with no real booking.
-* **Lost update**:
+**Partial booking**
 
-  * Two processes update same data and one update disappears (Total available seats).
-* **Inconsistent reads**:
+A user books seat A1. The system marks the seat as "booked." Then the payment fails. But the seat is still marked "booked." No one paid, but no one else can book it either.
 
-  * A user sees “Seat available” but it gets booked a moment later.
-* **Vacuum / bloat problem**:
+**Lost update**
 
-  * Long open transactions prevent cleanup, slowing the DB.
+100 seats are available. Two users book at the exact same moment. Each system reads "100 available." Each subtracts 1 and writes "99." Two seats were booked, but the count shows 99 instead of 98. One booking just vanished from the count.
 
-Seeing these problems motivates the need for transactions, isolation, and proper patterns.
+**Inconsistent view**
+
+A user sees "5 seats available" on the screen. They take 10 seconds to decide. Meanwhile, 3 seats get booked by others. The user clicks "Book" expecting 5 choices but only 2 remain. The screen lied.
+
+**Stuck cleanup**
+
+One process starts reading data and never finishes. The database can't clean up old records because that process might still need them. Over time, storage grows, queries slow down, and the system drags.
 
 ## 4. What Is a Transaction?
 
@@ -118,8 +119,6 @@ The database guarantees either:
 * None of them are applied (rollback).
 
 Transactions provide a predictable way to group steps that must succeed together.
-
-**Visual:**
 
 ```sql
 
@@ -193,19 +192,26 @@ COMMIT;
 
 ## 6. ACID Properties
 
+> *“Transactions are not a law of nature; they were created with a purpose, namely to
+> **simplify the programming model for applications accessing a database.** By using transactions, the
+> application is free to ignore certain potential error scenarios and concurrency issues, because the
+> database takes care of them instead (we call these safety guarantees).”*
+
+Excerpt From
+Designing Data-Intensive Applications - Kleppmann, Martin
+
+The safety guarantees provided by transactions are often described by ACID.
+
 * **Atomicity**: the booking and the payment both succeed, or both are undone.
-
 * **Consistency**: database rules (constraints, invariants) hold after the transaction.
-
 * **Isolation**: concurrent transactions do not interfere in unexpected ways.
-
 * **Durability**: once a transaction commits, its effects persist even after crashes.
 
 We will unpack isolation and durability more below.
 
 ### 6.1 Atomicity Example
 
-Atomicity ensures that all operations in a transaction succeed together or fail together. If any part fails, the entire transaction is rolled back.
+Atomicity ensures that all operations in a transaction succeed together or fail together. If any part fails (for example, crash, network interuption, disk full, etc), the entire transaction is rolled back.
 
 **Example: Booking a seat with payment simulation**
 
@@ -248,6 +254,8 @@ SELECT free_count FROM show_stats WHERE show_id = 1;  -- 2
 
 ### Mechanisms for Ensuring Atomicity
 
+> W/o atomicity, if an error occurs partway through making multiple changes, it is difficult to know which changes have taken effect and which haven't.
+
 There are two approaches: Logging and Shadow Paging.
 
 #### Approach 1: Logging:
@@ -256,18 +264,17 @@ There are two approaches: Logging and Shadow Paging.
 * Log records are maintained both in memory and on disk
 * Replay(redo) log after crash to put database back in correct state
 
-**Visual:**
+**Postgres Example**
 
 <img width="794" height="411" alt="image" src="https://github.com/user-attachments/assets/e75c1c55-55d4-4268-814a-2528706dff5e" />
 
 Source: [Data Engineer Things](https://blog.dataengineerthings.org/postgresql-wal-internals-for-data-engineers-ef6229584a99)
 
-
 Example: **Write Ahead Logging (WAL)**
 
 ![](image/Module1-TransactionFundamentals/1764050489213.png "Write Ahead Logging")
 
-Most database systems follows this approach:: MySQl< PostgreSQL, MSSQL, etc.
+Most database systems follows this approach:: MySQL PostgreSQL, MSSQL, etc.
 
 #### Approach 2: Shadow Pagging
 
@@ -275,6 +282,8 @@ Most database systems follows this approach:: MySQl< PostgreSQL, MSSQL, etc.
 * Transactions make changes to those copies
 * Make modified pages visible to other transactions only when the transactions successfully commits
 * Instance recovery after crash
+
+---
 
 ### 6.2 Consistency Example
 
@@ -330,6 +339,8 @@ DETAIL:  Failing row contains (1, -1, 0).
 
 ```
 
+---
+
 ### 6.3 Isolation Example
 
 Isolation ensures that concurrent transactions do not interfere. Two users booking the same seat should not both succeed.
@@ -369,55 +380,7 @@ COMMIT;
 
 Only one booking succeeds.
 
-## Understanding Anamolies
-
-While it's easier for application developers to assume transactions run one at a time (serially), databases allow interleaving to take advantage of parallel hardware (CPUs) and improve performance (hide latency - slower disk IO).
-
-Here's an example to build intuition:
-
-Two users share Account A ($1000). User 1 withdraws $100 via the mobile app while, at the same time, User 2 deposits $50 via the web app. Without proper isolation, both read $1000, write their own result, and the deposit overwrites the withdrawal. Final balance becomes $1050 instead of the correct $950.
-
-```
-Initial Account A: $1000
-
-TIME |   T1 (Withdraw $100)            |   T2 (Deposit $50)             | Account A | Comment
------+----------------------------------+--------------------------------+-----------+-------------------------------
- 1   | Read A = 1000                    |                                |   1000    | T1 reads initial value
- 2   |                                  | Read A = 1000                  |   1000    | T2 reads initial value (stale)
- 3   | Compute: 1000 - 100 = 900        |                                |   1000    | T1 computes locally
- 4   | Write A = 900                    |                                |    900    | T1 updates DB
- 5   | Commit                           |                                |    900    | T1 done
- 6   |                                  | Compute: 1000 + 50 = 1050      |    900    | T2 computes from stale read
- 7   |                                  | Write A = 1050                 |   1050    | T2 overwrites T1’s update
- 8   |                                  | Commit                         |   1050    | T2 done
-
-Final (Interleaved): 1050
-Correct (Serial):    950  -> ($1000 - $100 + $50)
-Outcome: Lost update (T1’s $100 withdrawal overwritten)
-```
-Serial Execution:
-
-```
-Serial: T1 then T2
-
-STEP |   T1 (Withdraw $100)            |   T2 (Deposit $50)             | Account A
------+----------------------------------+--------------------------------+-----------
- 1   | Read A = 1000                    |                                |   1000
- 2   | Compute: 1000 - 100 = 900        |                                |   1000
- 3   | Write A = 900                    |                                |    900
- 4   | Commit                           |                                |    900
- 5   |                                  | Read A = 900                   |    900
- 6   |                                  | Compute: 900 + 50 = 950        |    900
- 7   |                                  | Write A = 950                  |    950
- 8   |                                  | Commit                         |    950
-
-Final (Serial): 950
-```
-
-
-> *We need to find a way to interleave transaction but still make it appear as if they ran one-at-a-time.*
-
-## Mechanisms for Ensuring Isolation
+#### Mechanisms for Ensuring Isolation
 
 A **concurrency control** protocol is how DBMS decides the proper interleaving of operations from multiple transactions.
 
@@ -426,65 +389,7 @@ Two categories of protocols:
 * **Pessimistic:** Do not let problems arise in the first place
 * **Optimistic:** Assume conflicts are rare; deal with them after they happen
 
-### Schedule
-
-#### The Scenario
-
-You have two bank accounts: Account A and Account B, each starting with $1,000. Total money = $2,000.
-
-* **Transaction T1 (Transfer $100):**
-  * Reads A (gets $1,000)
-  * Calculates new A (A - $100 = $900)
-  * Writes A (updates A to $900)
-  * Reads B (gets $1,000)
-  * Calculates new B (B + $100 = $1,100)
-  * Writes B (updates B to $1,100)
-* **Transaction T2 (Add 6% Interest):**
-  * Reads A
-  * Calculates new A (A * 1.06)
-  * Writes A
-  * Reads B
-  * Calculates new B (B * 1.06)
-  * Writes B
-
-The correct final total for A + B should be **$2,120** (after T1 and T2, if handled correctly).
-
-#### What is a Schedule?
-
-(Simpler) A schedule is the actual order in which the individual operations of T1 and T2 are executed by the database.
-
-A schedule is a sequence of all operations (reads and writes) performed by a set of concurrent transactions (T1, T2, ..., Tn), maintaining the internal order of operations within each individual transaction.
-
-#### Example of a Serial Execution:
-
-![1764065204541](image/Module1-TransactionFundamentals/1764065204541.png)
-
-#### Example of Interleaving Execution:
-
-| Interleaving Good Example                                               | Interleaving Bad Examp                                                  |
-| -- | -- |
-| ![1764064801106](image/Module1-TransactionFundamentals/1764064801106.png) | ![1764065053534](image/Module1-TransactionFundamentals/1764065053534.png) |
-
-> *How do we judge whether a schedule is correct?*
-
-**If the schedule is equivalent to some serial execution.**
-
-Interleaving operations can improve performance but, if not managed carefully by the database's concurrency control, can lead to incorrect or inconsistent states. The goal is to find schedules that are serializable (meaning they always produce a correct result, even if they run concurrently).
-
-#### Properties of Schedule:
-
-##### Serial Schedule
-
-* A schedule that does not interleave the actions of different transactions.
-
-##### Equivalent Schedule
-
-* The effect of executing the first schedule is identical to the effective executing second schedule
-
-##### Serializable Schedule
-
-* Equivalent to some serial execution of the transaction
-* If a schedule is serializable, its execution will always leave the database in a consistent state, just as if transactions had run sequentially.
+---
 
 ### 6.4 Durability Example
 
@@ -535,8 +440,6 @@ A transaction and session can be in these simplified states:
 * **Idle in transaction**: transaction open but no active query (dangerous if left too long).
 * **Failed / Aborted**: an error occurred; only **ROLLBACK** allowed.
 
-**Visual:**
-
 ```plaintext
 
 Idle -> BEGIN -> Active -> (COMMIT -> Idle)
@@ -546,7 +449,7 @@ Idle -> BEGIN -> Active -> (COMMIT -> Idle)
 
 ### Idle in Transaction
 
-**Happens when you run:**
+Happens when you run:
 
 ```sql
 
@@ -559,45 +462,13 @@ This keeps locks open and can slow down the system.
 
 ### Aborted
 
-An error inside a transaction makes it unusable until you run:
-
-```sql
-
-ROLLBACK;
-
-```
+An error inside a transaction makes it unusable until you run: `ROLLBACK;`
 
 **Why this matters**: long “idle in transaction” sessions hold locks and prevent vacuum, causing performance issues.
 
-
-
-## 8. Basic Booking Transaction
-
-```sql
-
-BEGIN;
-
-SELECT reserved
-FROM seats
-WHERE show_id = 1 AND seat_no = 'A3'
-FOR UPDATE;
-
-UPDATE seats
-SET reserved = TRUE
-WHERE show_id = 1 AND seat_no = 'A3';
-
-UPDATE show_stats
-SET free_count = free_count - 1
-WHERE show_id = 1;
-
-COMMIT;
-
-```
-
 **FOR UPDATE** ensures two people cannot book the same seat.
 
-
-## 9. Row Locks (Why We Need FOR UPDATE)
+## 8. Row Locks (Why We Need FOR UPDATE)
 
 PostgreSQL uses several lock types; the most common in day-to-day code are **row-level locks**. Table-level locks exist too but are less frequent for normal OLTP.
 
@@ -626,14 +497,6 @@ User 2 waits
 * UPDATE
 * DELETE
 
-**Readers and writers:**
-
-* Readers do not block other readers
-* Readers do not block writers
-* Writers block writers
-
-This is because PostgreSQL uses MVCC (covered later).
-
 Example Safe Locking Pattern
 
 ```sql
@@ -647,13 +510,13 @@ COMMIT;
 
 ```
 
-## 10. Deadlock
+## 9. Deadlock
 
 Deadlock happens when two transactions wait on each other.
 
 Example:
 
-```
+```plaintext
 
 User 1 locks A1  
 User 2 locks A2  
@@ -667,7 +530,7 @@ PostgreSQL automatically resolves deadlocks by killing one transaction.
 
 **Example:**
 
-**Session 1:**
+Session 1:
 
 ```sql
 
@@ -678,7 +541,7 @@ SELECT * FROM seats WHERE seat_number = 'A2' FOR UPDATE; -- may wait
 
 ```
 
-**Session 2:**
+Session 2:
 
 ```sql
 
@@ -689,7 +552,7 @@ SELECT * FROM seats WHERE seat_number = 'A1' FOR UPDATE; -- deadlock occurs
 
 ```
 
-**One of the sessions will get **deadlock detected** and be aborted.**
+One of the sessions will get deadlock detected and be aborted.
 
 **PostgreSQL Output Example:**
 
@@ -709,76 +572,187 @@ CONTEXT:  while locking tuple (0,16) in relation "seats"
 * **Keep transactions short**: the less time locks are held, the lower the chance of deadlocks.
 * Use lower isolation levels where acceptable.
 
-## 11. MVCC (Multi-Version Concurrency Control)
+## 10. Savepoints and Partial Rollback
 
-MVCC lets PostgreSQL give each transaction a consistent snapshot.
+Savepoints allow you to roll back a portion of a transaction without aborting the whole transaction.
 
-**Key behavior:**
-
-* Readers do NOT block readers
-* Readers do NOT block writers
-* Writers DO block writers
-
-**Mental picture**
-
-```
-
-User 1 reads seat A1
-User 2 updates A1 → creates a new version
-User 1 continues reading old version
-
-```
-
-**Example (snapshot behavior)**
-
-1. **User 1:**
-
-```sql
-
-BEGIN ISOLATION LEVEL REPEATABLE READ;
-
-SELECT reserved FROM seats WHERE show_id = 1 AND seat_no = 'A3';
--- returns: false
-
-```
-
-2. **User 2:**
+**Example:**
 
 ```sql
 
 BEGIN;
-UPDATE seats SET reserved = TRUE WHERE show_id = 1 AND seat_no = 'A3';
+
+SAVEPOINT before_reserve;
+UPDATE seats SET reserved = true WHERE show_id = 1 AND seat_no = 'A3';
+
+-- Suppose payment fails here:
+ROLLBACK TO before_reserve;
+
+-- Now we can try a different seat or abort entirely
+UPDATE seats SET reserved = true WHERE show_id = 1 AND seat_no = 'A4';
+
 COMMIT;
 
 ```
 
-3. **Back in User 1:**
+**Important**: Savepoints do not release locks taken before the savepoint - they only undo the in-transaction changes made after the savepoint.
+
+**Nested transactions**: PostgreSQL does not support true nested transactions; savepoints are the way to get similar behavior.
+
+## 11. Putting It All Together
+
+Below is a full illustration of a transaction with all steps:
+
+```plaintext
+
+Transaction starts
+|
+|-- Take a snapshot
+|-- Lock required rows
+|-- Perform updates
+|-- Optional: Use savepoints
+|-- Check errors
+|-- Commit or rollback
+|
+Transaction ends
+
+```
+
+**Example:**
 
 ```sql
 
-UPDATE seats SET reserved = TRUE WHERE show_id = 1 AND seat_no = 'A3';
--- still returns: false  (User 1 sees its snapshot)
+BEGIN;
+
+SELECT * FROM seats WHERE show_id = 1 AND seat_no = 'A3' FOR UPDATE;
+
+UPDATE seats 
+SET reserved = true 
+WHERE show_id = 1 AND seat_no = 'A3';
+
+UPDATE show_stats 
+SET free_count = free_count - 1 
+WHERE show_id = 1;
+
 COMMIT;
 
 ```
 
-This illustrates how snapshot isolation works: User 1 sees the database as it was when User 1 started (or for Read Committed, as of each statement - see later).
+## 12. How to ensure Atomicity Beyond Databases?
 
-**Reset**
+<img width="1334" height="1200" alt="image" src="https://github.com/user-attachments/assets/49b1bd09-16cd-4697-be81-ac56983305ef" />
 
-```sql
+## 13. Schedule
 
--- Reset seats to initial state
-UPDATE seats SET reserved = FALSE WHERE show_id = 1;
+### What is a Schedule?
 
--- Reset show_stats
-UPDATE show_stats SET free_count = (SELECT COUNT(*) FROM seats WHERE show_id = 1 AND reserved = FALSE) WHERE show_id = 1;
+(Simpler) A schedule is the actual order in which the individual operations of T1 and T2 are executed by the database.
+
+A schedule is a sequence of all operations (reads and writes) performed by a set of concurrent transactions (T1, T2, ..., Tn), maintaining the internal order of operations within each individual transaction.
+
+### Shedule Example
+
+You have two bank accounts: Account A and Account B, each starting with $1,000. Total money = $2,000.
+
+* **Transaction T1 (Transfer $100):**
+  * Reads A (gets $1,000)
+  * Calculates new A (A - $100 = $900)
+  * Writes A (updates A to $900)
+  * Reads B (gets $1,000)
+  * Calculates new B (B + $100 = $1,100)
+  * Writes B (updates B to $1,100)
+* **Transaction T2 (Add 6% Interest):**
+  * Reads A
+  * Calculates new A (A * 1.06)
+  * Writes A
+  * Reads B
+  * Calculates new B (B * 1.06)
+  * Writes B
+
+The correct final total for A + B should be **$2,120** (after T1 and T2, if handled correctly).
+
+#### Example of a Serial Execution:
+
+![1764065204541](image/Module1-TransactionFundamentals/1764065204541.png)
+
+#### Example of Interleaving Execution:
+
+| Interleaving Good Example                                               | Interleaving Bad Examp                                                  |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| ![1764064801106](image/Module1-TransactionFundamentals/1764064801106.png) | ![1764065053534](image/Module1-TransactionFundamentals/1764065053534.png) |
+
+> *How do we judge whether a schedule is correct?*
+
+**If the schedule is equivalent to some serial execution.**
+
+Interleaving operations can improve performance but, if not managed carefully by the database's concurrency control, can lead to incorrect or inconsistent states. The goal is to find schedules that are serializable (meaning they always produce a correct result, even if they run concurrently).
+
+### Properties of Schedule:
+
+##### Serial Schedule
+
+* A schedule that does not interleave the actions of different transactions.
+
+##### Equivalent Schedule
+
+* The effect of executing the first schedule is identical to the effective executing second schedule
+
+##### Serializable Schedule
+
+* Equivalent to some serial execution of the transaction
+* If a schedule is serializable, its execution will always leave the database in a consistent state, just as if transactions had run sequentially.
+
+## 14. Concurrency Anamolies
+
+### 14.1 Understanding Anamolies
+
+While it's easier for application developers to assume transactions run one at a time (serially), databases allow interleaving to take advantage of parallel hardware (CPUs) and improve performance (hide latency - slower disk IO).
+
+Here's an example to build intuition:
+
+Two users share Account A ($1000). User 1 withdraws $100 via the mobile app while, at the same time, User 2 deposits $50 via the web app. Without proper isolation, both read $1000, write their own result, and the deposit overwrites the withdrawal. Final balance becomes $1050 instead of the correct $950.
 
 ```
+Initial Account A: $1000
 
-## 12. Concurrency Anamolies
+TIME |   T1 (Withdraw $100)            |   T2 (Deposit $50)             | Account A | Comment
+-----+----------------------------------+--------------------------------+-----------+-------------------------------
+ 1   | Read A = 1000                    |                                |   1000    | T1 reads initial value
+ 2   |                                  | Read A = 1000                  |   1000    | T2 reads initial value (stale)
+ 3   | Compute: 1000 - 100 = 900        |                                |   1000    | T1 computes locally
+ 4   | Write A = 900                    |                                |    900    | T1 updates DB
+ 5   | Commit                           |                                |    900    | T1 done
+ 6   |                                  | Compute: 1000 + 50 = 1050      |    900    | T2 computes from stale read
+ 7   |                                  | Write A = 1050                 |   1050    | T2 overwrites T1’s update
+ 8   |                                  | Commit                         |   1050    | T2 done
 
-These anamolies demonstrates the need for various isolation levels.
+Final (Interleaved): 1050
+Correct (Serial):    950  -> ($1000 - $100 + $50)
+Outcome: Lost update (T1’s $100 withdrawal overwritten)
+```
+
+Serial Execution:
+
+```
+Serial: T1 then T2
+
+STEP |   T1 (Withdraw $100)            |   T2 (Deposit $50)             | Account A
+-----+----------------------------------+--------------------------------+-----------
+ 1   | Read A = 1000                    |                                |   1000
+ 2   | Compute: 1000 - 100 = 900        |                                |   1000
+ 3   | Write A = 900                    |                                |    900
+ 4   | Commit                           |                                |    900
+ 5   |                                  | Read A = 900                   |    900
+ 6   |                                  | Compute: 900 + 50 = 950        |    900
+ 7   |                                  | Write A = 950                  |    950
+ 8   |                                  | Commit                         |    950
+
+Final (Serial): 950
+```
+
+> *We need to find a way to interleave transaction but still make it appear as if they ran one-at-a-time.*
+
+Below are different types of anamolies:
 
 ### **Dirty read**
 
@@ -827,9 +801,9 @@ A subtle anomaly where two transactions read overlapping data and then write non
 
 Repeatable Read prior to PostgreSQL 9.1 had different behavior; current Repeatable Read still allows write skew; Serializable prevents it by refusing some transactions (serialization failure).
 
-## 13. Isolation Levels
+## 15. Isolation Levels
 
-### Read Committed (default)
+### 15.1 Read Committed (default)
 
 * Each statement sees the database as of the start of that statement.
 * Non-repeatable reads and phantom reads can occur.
@@ -837,7 +811,7 @@ Repeatable Read prior to PostgreSQL 9.1 had different behavior; current Repeatab
 
 **Movie example**: In a long transaction, you might see seat A1 available on one SELECT, and booked on a later SELECT inside the same transaction because another transaction committed in between.
 
-### Repeatable Read
+### 15.2 Repeatable Read
 
 * The whole transaction sees a consistent snapshot taken at the start of the transaction.
 * Prevents non-repeatable reads.
@@ -846,7 +820,7 @@ Repeatable Read prior to PostgreSQL 9.1 had different behavior; current Repeatab
 
 **Movie example**: If T1 starts, then T2 commits updates, T1 still sees the pre-start state for **all** statements.
 
-### Serializable
+### 15.3 Serializable
 
 * The strongest level. The database ensures transactions behave as if they were executed serially (one after another).
 * If PostgreSQL cannot make a transaction serializable, it raises a serialization_failure error and one transaction must be retried by the application.
@@ -854,79 +828,7 @@ Repeatable Read prior to PostgreSQL 9.1 had different behavior; current Repeatab
 
 **Note**: Serializable corrects the last class of anomalies by aborting one of the conflicting transactions. This requires careful application handling (retry on serialization failure).
 
-## 14. Savepoints and Partial Rollback
-
-Savepoints allow you to roll back a portion of a transaction without aborting the whole transaction.
-
-**Example:**
-
-```sql
-
-BEGIN;
-
-SAVEPOINT before_reserve;
-UPDATE seats SET reserved = true WHERE show_id = 1 AND seat_no = 'A3';
-
--- Suppose payment fails here:
-ROLLBACK TO before_reserve;
-
--- Now we can try a different seat or abort entirely
-UPDATE seats SET reserved = true WHERE show_id = 1 AND seat_no = 'A4';
-
-COMMIT;
-
-```
-
-**Important**: Savepoints do not release locks taken before the savepoint - they only undo the in-transaction changes made after the savepoint.
-
-**Nested transactions**: PostgreSQL does not support true nested transactions; savepoints are the way to get similar behavior.
-
-
-
-## 15. Putting It All Together
-
-Below is a full illustration of a transaction with all steps:
-
-```plaintext
-
-Transaction starts
-|
-|-- Take a snapshot
-|-- Lock required rows
-|-- Perform updates
-|-- Optional: Use savepoints
-|-- Check errors
-|-- Commit or rollback
-|
-Transaction ends
-
-```
-
-**Example:**
-
-```sql
-
-BEGIN;
-
-SELECT * FROM seats WHERE show_id = 1 AND seat_no = 'A3' FOR UPDATE;
-
-UPDATE seats 
-SET reserved = true 
-WHERE show_id = 1 AND seat_no = 'A3';
-
-UPDATE show_stats 
-SET free_count = free_count - 1 
-WHERE show_id = 1;
-
-COMMIT;
-
-```
-
-## 16. How to ensure Atomicity Beyond Databases?
-<img width="1334" height="1200" alt="image" src="https://github.com/user-attachments/assets/49b1bd09-16cd-4697-be81-ac56983305ef" />
-
-
-## 17. Glossary
+## 16. Glossary
 
 * **Transaction**: a logical group of DB operations treated as a unit.
 * **ACID**: Atomicity, Consistency, Isolation, Durability.
@@ -939,7 +841,7 @@ COMMIT;
 * **Deadlock**: cyclic wait for locks; DB aborts one transaction.
 * **Savepoint**: named point within a transaction you can roll back to.
 
-## 18. Key takeaways
+## 17. Key takeaways
 
 * A transaction groups operations together
 * ACID describes how a transaction behaves
@@ -952,4 +854,5 @@ COMMIT;
 * Simple systems like movie booking or bank transfers rely heavily on transaction correctness
 
 ---
+
 End of Module 1
