@@ -463,14 +463,6 @@ Most databases that provide serializability today use one of the three technique
 * Non-repeatable + phantom solved by REPEATABLE READ snapshot.
 * SERIALIZABLE adds logical safety (abort cycles).
 * Retry on 40001 is normal.
-
-## Reflection
-
-1. What creates lost update? Separate read-modify-write.
-2. Why atomic UPDATE solves it? Single evaluation at commit time.
-3. Why write skew needs invariant read? To form dependency edges.
-4. Why SERIALIZABLE aborts? No valid serial order preserving both decisions.
-
 ---
 
 End of Module 2
