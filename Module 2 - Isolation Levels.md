@@ -9,9 +9,9 @@
 
 ---
 
-### **Key Concepts**
+## **Key Concepts**
 
-**Isolation**  = rules about what a transaction can "see" while others change data
+> ***Isolation**  = rules about what a transaction can "see" while others change data*
 
 **Levels (PostgreSQL):**
 
@@ -59,7 +59,7 @@ CREATE TABLE seats(
 );
 
 - Populate movie and seat details
-INSERT INTO shows(code) VALUES ('S1');
+INSERT INTO shows(code) VALUES ('S1'); -- Kantha evening show
 INSERT INTO seats(show_id, seat_no, house)
 SELECT 1,'A1',TRUE UNION ALL
 SELECT 1,'A2',TRUE UNION ALL
@@ -84,9 +84,52 @@ SELECT 1,'A4',FALSE;
 
 ---
 
-### Snapshot Differences
+## Snapshot Differences
 
-**READ COMMITTED** (Non-Repeatable Read)
+### **READ COMMITTED** (Non-Repeatable Read)
+
+* When reading from the database, you will only see data that has been committed (no dirty reads)
+* When writing to the database, you will only overwrite data that has been committed (no dirty writess)
+
+#### No dirty reads
+
+Imagine a transaction has written some data to the database, but the transaction has not yet committed or aborted.
+
+Can another **transaction see that uncommitted data**? if yes, that is called a dirty read.
+
+**Example:**
+
+User 1 has set x = 3 but user 2's get x still returns the old value 2 while user 1 has not yet committed.
+
+![1765178796356](image/Module2-IsolationLevels/1765178796356.png)
+
+*No dirty reads: user 2 sees the new value for x only after user 1’s transaction has committed.*
+
+#### No dirty writes
+
+What happens if two transactions concurrently try to update the same object in a database?
+
+Later writes overwrites the earlier (assumed). What happens if the earlier write is part of a transaction that has not yet committed, so earlier write overwrites an uncommitted value?
+
+***Overwriting an uncommitted value*** - that is called dirty wrtite.
+
+**Example:**
+
+On a used car website, two people Alice and Bob are simultaneously trying to buy the same car. Buying a car requires two database writes:
+
+* The listing on the website needs to be updated to reflect the buyer
+* The sales invoice needs to be sent to the buyer
+
+![1765179897615](image/Module2-IsolationLevels/1765179897615.png)
+
+Note:
+
+* The Sale is awarded to Bob (because he performs the winning (last) update to the listings table)
+* The invoice is sent to Alice (because she performs the wining update to the invoice table)
+
+Read committed prevents such mishaps.
+
+**Demo:**
 
 ```
 Session A                          | Session B
@@ -95,25 +138,14 @@ BEGIN                              |
 SELECT free seats -> A1,A2,A3,A4   |
                                    | UPDATE A2 reserved=TRUE; COMMIT
 SELECT free seats -> A1,A3,A4      |
+
 COMMIT                             |
 ```
-
-**Demo:**
 
 ```sql
 -- Session A
 BEGIN;
 SELECT seat_no FROM seats WHERE show_id = 1 AND reserved = FALSE ORDER BY seat_no;
-
-/***
- seat_no
----------
- A1
- A2
- A3
- A4
-(4 rows)
-***/
 
 -- wait
 
@@ -124,20 +156,44 @@ UPDATE seats SET reserved = TRUE WHERE show_id = 1 AND seat_no = 'A2';
 -- Session A
 SELECT seat_no FROM seats WHERE show_id=1 AND reserved=FALSE ORDER BY seat_no;
 
-/***
- seat_no
----------
- A1
- A3
- A4
-(3 rows)
-***/
+-- It cannot concurrently overwrite A2 - prevented by READ COMMITTED
+-- Read skew exists - A2 is missing now - non-repeatable read.
+
 
 ```
 
+Note: When Session A reads the rows, A2 is missing which was available at the begining of txn - that is called read skew.
+
+Read committed isolation level
+
+* provides abortability
+* preventing reading incomplete results of a txn
+* prevents concurrents writes from getting intermingled
+* read skew is acceptable
+
 ---
 
-**REPEATABLE READ** (Stale Snapshot)
+### REPEATABLE READ (Snapshot Isolation)
+
+**Problem in READ COMMITTED (Read Skew):**
+
+In READ COMMITTED isolation level, each query within a transaction sees the latest committed data at the time of that query. This means *if you read the same data twice within a transaction, you might get **different results** if another transaction commits changes in between*.
+
+**Example:**
+
+Session A begins a transaction and reads available seats, seeing 4 seats (A1, A2, A3, A4). Meanwhile, Session B reserves seat A2 and commits. When Session A reads the available seats again within the same transaction, it now sees only 3 seats (A1, A3, A4). This inconsistency - where the same read returns different results within a single transaction - is called **read skew**.
+
+**Read Skew:**
+
+A transaction ***reads the same data multiple times and gets different results*** because other transactions have committed changes in between the reads.
+
+**Why This is Problematic:**
+
+Session A cannot make reliable decisions based on data that changes mid-transaction. If Session A is performing business logic that depends on a consistent view (e.g., calculating availability, generating reports, or enforcing constraints), read skew can lead to incorrect conclusions and actions.
+
+**How REPEATABLE READ (Snapshot Isolation) Solves This:**
+
+REPEATABLE READ uses snapshot isolation, which ensures that a transaction sees a **consistent snapshot** of the database from the moment it begins. All reads within the transaction see the same state, even if other transactions commit changes. This prevents read skew and allows transactions to reason about data consistently.
 
 ```
 Session A (RR)                     | Session B
@@ -162,15 +218,7 @@ SELECT * FROM seats;
 -- Session A
 BEGIN ISOLATION LEVEL REPEATABLE READ;
 SELECT seat_no FROM seats WHERE reserved = FALSE AND show_id = 1 ORDER BY seat_no;
-/***
- seat_no
----------
- A1
- A2
- A3
- A4
-(4 rows)
-***/
+
 -- wait
 
 -- Session B
@@ -178,18 +226,9 @@ UPDATE seats SET reserved = TRUE WHERE show_id = 1 AND seat_no = 'A2'; COMMIT;
 
 --Session A
 SELECT seat_no FROM seats WHERE reserved = FALSE AND show_id = 1 ORDER BY seat_no;
-/***
- seat_no
----------
- A1
- A2
- A3
- A4
-(4 rows)
-***/
 
-UPDATE seats SET reserved = TRUE WHERE show_id = 1 AND seat_no = 'A2';
 
+-- UPDATE seats SET reserved = TRUE WHERE show_id = 1 AND seat_no = 'A2';
 -- ERROR: could not serialize access due to concurrent update
 
 COMMIT;
@@ -197,13 +236,19 @@ COMMIT;
 
 ```
 
+To implement snapshot isolation, databases maintain several different committed versions of an object, because various in-progress transactions may need to see the state of database at different points in time. This is technique is known as Multi-Version Concurrency Control (MVCC) - We will discuss this in MVCC module.
+
 ---
 
-**Lost Update** (Counter - Total Free Seats)
+#### **Preventing Lost Updates**
 
-Lost Update = both transactions read the same base value, compute a new value locally, then write-last write overwrites the first.
+Lost update problem can occur if an application reads some value from the database, modifies it and writes it back the modified value.
 
-**Create counter table (materialized free seats):**
+If two transactions do this concurrently, one of the modifications can be lost, because the second write does not include the first modification.
+
+Example Scenario: Free Seat Cunter
+
+Create counter table (materialized free seats):
 
 ```sql
 CREATE TABLE show_stats(
@@ -217,13 +262,13 @@ SELECT 1, COUNT(*) FROM seats WHERE show_id=1 AND reserved=FALSE;
 
 ```
 
-**Initial:**
+Initial:
 
 ```
 SELECT * FROM show_stats; -- free_count = 4
 ```
 
-**Snapshot difference:**
+Demo:
 
 ```
 Session A                            | Session B
@@ -235,8 +280,6 @@ UPDATE show_stats SET free_count=3   | UPDATE show_stats SET free_count=3
 COMMIT                               | COMMIT (overwrites Session A's change)
 Final free_count = 3 (should be 2)
 ```
-
-**Demo:**
 
 ```sql
 -- Session A
@@ -264,47 +307,61 @@ Why isolation levels don’t fix it:
 
 **Preventive Approaches**
 
-1. Atomic in-place update:
+* **Atomic write operations (cursor stability):**
 
-   ```sql
-   UPDATE show_stats
-   SET free_count = free_count - 1
-   WHERE show_id=1 AND free_count > 0;
-   ```
+  Usually implemented by taking an exclusive lock on the object when it is read so that no other txn can read it until the updates has been applied.
 
-   **Safe:** Each reservation uses a single statement; no lost update because subtraction happens directly in the database.
-2. Pessimistic locking:
+  ```sql
+  UPDATE show_stats
+  SET free_count = free_count - 1
+  WHERE show_id=1 AND free_count > 0;
+  ```
+* **Explicit locking:**
 
-   ```sql
-   BEGIN;
-   SELECT free_count FROM show_stats WHERE show_id=1 FOR UPDATE;
-   UPDATE show_stats SET free_count = free_count - 1 WHERE show_id=1 AND free_count > 0;
-   COMMIT;
-   ```
+  Explicity lock objects that are going to be updated. Then the application can perform read-modify-write cycle, and if any other transaction tries to concurrently read the same object, it is forced to wait until the first txn has completed.
 
-   Prevents concurrent overwrite by forcing serialization on the row.
-3. Optimistic version check:
+  ```sql
+  BEGIN;
+  SELECT free_count FROM show_stats WHERE show_id=1 FOR UPDATE;
+  UPDATE show_stats SET free_count = free_count - 1 WHERE show_id=1 AND free_count > 0;
+  COMMIT;
+  ```
+* **Optimistic version check: (Compare and set)**
 
-   ```sql
-   BEGIN;
-   SELECT free_count, version FROM show_stats WHERE show_id=1;
-   -- Suppose free_count=4, version=0
-   UPDATE show_stats
-   SET free_count = free_count - 1,
-       version = version + 1
-   WHERE show_id=1 AND version = 0;
-   -- Check rows affected = 1 else retry
-   COMMIT;
-   ```
+  Allowing an update to happen only if the value has not changed since you last read it. If the current value does not match what you previously read (version = 0) - the update has no effect.
 
-   If a concurrent transaction already updated (version changed), this update affects 0 rows; client retries with fresh read.
+  ```sql
+  BEGIN;
+  SELECT free_count, version FROM show_stats WHERE show_id=1;
+  -- Suppose free_count=4, version=0
+  UPDATE show_stats
+  SET free_count = free_count - 1,
+      version = version + 1
+  WHERE show_id=1 AND version = 0;
+  -- Check rows affected = 1 else retry
+  COMMIT;
+  ```
+
+  If a concurrent transaction already updated (version changed), this update affects 0 rows; client retries with fresh read.
 
 ---
 
-**Write Skew** (REPEATABLE READ)
+#### Write Skew (REPEATABLE READ)
 
-```
-Session A (RR)                         | Session B (RR)
+In our Movie Seat booking example, we need to maintain atleast one reserved seat at any one time.
+
+Imagine two VIP users decided to book a seat. They both happen to click the button to book the seat at approximately the same time. What happens next is illustrated below:
+
+![1765191327055](image/Module2-IsolationLevels/1765191327055.png)
+
+This anamoly is called write skew. It is neither a dirty write nor a lost update, because the two transactions are updating two different objects.
+
+Its less obvious that a conflict occured here, but its definetly a race condition: if the txn run one after another, the second user would have been prevented from from booking a reserved seat.
+
+**Demo:**
+
+```plaintext
+Session A (RR)                     | Session B (RR)
 -----------------------------------+-----------------------------
 BEGIN                              | BEGIN
 SELECT house free -> A1,A2         | SELECT house free -> A1,A2
@@ -313,21 +370,12 @@ COMMIT                             | COMMIT
 Result: A1,A2 both reserved (invariant broken)
 ```
 
-**Demo:**
-
 ```sql
 UPDATE seats SET reserved=FALSE WHERE show_id=1;
 
 -- Session A:
  SELECT seat_no FROM seats WHERE house = TRUE and show_id = 1 and reserved = FALSE;
 
-/***
- seat_no
----------
- A1
- A2
-(2 rows)
-***/
 
 UPDATE seats SET reserved = TRUE WHERE show_id = 1 AND seat_no = 'A1';
 
@@ -339,13 +387,6 @@ BEGIN ISOLATION LEVEL REPEATABLE READ;
 
 SELECT seat_no FROM seats WHERE house = TRUE AND show_id = 1 AND reserved = FALSE;
 
-/***
- seat_no
----------
- A1
- A2
-(2 rows)
-***/
 
 UPDATE seats SET reserved = TRUE WHERE show_id = 1 AND seat_no = 'A2'; COMMIT;
 
@@ -354,23 +395,22 @@ COMMIT;
 
 SELECT seat_no FROM seats WHERE house = TRUE AND show_id = 1 AND reserved = FALSE;
 
-/***
- seat_no
----------
- A1
- A2
-(2 rows)
-
 -- Violates the policy
-***/
+
 ```
 
 ---
 
-**SERIALIZABLE**
+### Serializable
 
-```
-Session A (SERIALIZABLE)               | Session B (SERIALIZABLE)
+* Strongest isolation level
+* Guarantees that even though txns may execute in parallel, the end result is the same as if they had ***executed one at a time, serially, without any concurrency***
+* Prevents all possible race conditions
+
+**Demo:**
+
+```plaintext
+Session A (SERIALIZABLE)           | Session B (SERIALIZABLE)
 -----------------------------------+-----------------------------
 BEGIN                              | BEGIN
 SELECT house free -> A1,A2         | SELECT house free -> A1,A2
@@ -378,8 +418,6 @@ UPDATE A1 reserved=TRUE            | UPDATE A2 reserved=TRUE
 COMMIT (OK)                        | COMMIT → ERROR 40001 (abort)
 Retry Session B → sees updated state; invariant preserved
 ```
-
-**Demo:**
 
 ```sql
 -- Reset
@@ -390,13 +428,6 @@ UPDATE seats SET reserved = FALSE WHERE show_id = 1;
 BEGIN ISOLATION LEVEL SERIALIZABLE;
 
 SELECT seat_no FROM seats WHERE show_id = 1 AND house = TRUE AND reserved = FALSE;
-/***
- seat_no
----------
- A1
- A2
-(2 rows)
-***/
 
 UPDATE seats SET reserved = TRUE WHERE show_id = 1 AND seat_no = 'A1';
 
@@ -404,14 +435,6 @@ UPDATE seats SET reserved = TRUE WHERE show_id = 1 AND seat_no = 'A1';
 -- Session B
 BEGIN ISOLATION LEVEL SERIALIZABLE;
 SELECT seat_no FROM seats WHERE show_id = 1 AND house = TRUE AND reserved = FALSE;
-
-/***
- seat_no
----------
- A1
- A2
-(2 rows)
-***/
 
 UPDATE seats SET reserved = TRUE WHERE show_id = 1 AND seat_no = 'A2';
 COMMIT;
@@ -425,21 +448,15 @@ HINT:  The transaction might succeed if retried.
 ***/
 ```
 
----
+#### Implementing Serializablity
 
-### Choosing Minimal Mechanism
+Most databases that provide serializability today use one of the three techniques:
 
-| Goal                           | Mechanism                            |
-| ------------------------------ | ------------------------------------ |
-| List seats                     | READ COMMITTED                       |
-| Stable multi-read availability | REPEATABLE READ                      |
-| House seat invariant           | SERIALIZABLE or guard row            |
-| Avoid lost update on counter   | Atomic UPDATE / FOR UPDATE / version |
-| Double booking prevention      | UNIQUE constraint                    |
+* Actual Serial Execution
+* Two Phase Locking (Pessimistic)
+* Serializable Snapshot Isolation (Optimistic)
 
----
-
-### Summary
+## Summary
 
 * Lost update requires coordination (atomic, lock, version).
 * Write skew prevented by SERIALIZABLE if predicate read occurs.
@@ -447,9 +464,7 @@ HINT:  The transaction might succeed if retried.
 * SERIALIZABLE adds logical safety (abort cycles).
 * Retry on 40001 is normal.
 
----
-
-### Reflection
+## Reflection
 
 1. What creates lost update? Separate read-modify-write.
 2. Why atomic UPDATE solves it? Single evaluation at commit time.
@@ -457,3 +472,5 @@ HINT:  The transaction might succeed if retried.
 4. Why SERIALIZABLE aborts? No valid serial order preserving both decisions.
 
 ---
+
+End of Module 2
