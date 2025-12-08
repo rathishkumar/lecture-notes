@@ -89,7 +89,7 @@ SELECT 1,'A4',FALSE;
 **READ COMMITTED** (Non-Repeatable Read)
 
 ```
-Session A                  | Session A
+Session A                          | Session B
 -----------------------------------+-----------------------------
 BEGIN                              |
 SELECT free seats -> A1,A2,A3,A4   |
@@ -117,7 +117,7 @@ SELECT seat_no FROM seats WHERE show_id = 1 AND reserved = FALSE ORDER BY seat_n
 
 -- wait
 
--- Session A
+-- Session B
 UPDATE seats SET reserved = TRUE WHERE show_id = 1 AND seat_no = 'A2';
 
 
@@ -140,7 +140,7 @@ SELECT seat_no FROM seats WHERE show_id=1 AND reserved=FALSE ORDER BY seat_no;
 **REPEATABLE READ** (Stale Snapshot)
 
 ```
-Session A (RR)                         | Session B
+Session A (RR)                     | Session B
 -----------------------------------+-----------------------------
 BEGIN ISOLATION LEVEL RR           |
 SELECT free seats -> A1,A2,A3,A4   |
@@ -173,7 +173,7 @@ SELECT seat_no FROM seats WHERE reserved = FALSE AND show_id = 1 ORDER BY seat_n
 ***/
 -- wait
 
--- Session A
+-- Session B
 UPDATE seats SET reserved = TRUE WHERE show_id = 1 AND seat_no = 'A2'; COMMIT;
 
 --Session A
